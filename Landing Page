@@ -1,0 +1,635 @@
+import React, { Component } from "react";
+import axios from "axios";
+import PropTypes from "prop-types";
+import TablePaginationActions from "../../utils/TablePaginationActions";
+
+import FadeIn from "react-fade-in";
+
+import ls from "local-storage";
+import FileDownload from "js-file-download";
+
+import Button from "@material-ui/core/Button";
+import CircularProgress from "@material-ui/core/CircularProgress";
+import Dialog from "@material-ui/core/Dialog";
+// import DialogActions from "@material-ui/core/DialogActions";
+import DialogContent from "@material-ui/core/DialogContent";
+import DialogContentText from "@material-ui/core/DialogContentText";
+import DialogTitle from "@material-ui/core/DialogTitle";
+import Fab from "@material-ui/core/Fab";
+import Grid from "@material-ui/core/Grid";
+import IconButton from "@material-ui/core/IconButton";
+import LinearProgress from "@material-ui/core/LinearProgress";
+import Paper from "@material-ui/core/Paper";
+import Table from "@material-ui/core/Table";
+import TableBody from "@material-ui/core/TableBody";
+import TableCell from "@material-ui/core/TableCell";
+import TableFooter from "@material-ui/core/TableFooter";
+import TableHead from "@material-ui/core/TableHead";
+import TablePagination from "@material-ui/core/TablePagination";
+import TableRow from "@material-ui/core/TableRow";
+import Tooltip from "@material-ui/core/Tooltip";
+import Typography from "@material-ui/core/Typography";
+import DeleteOutlineIcon from "@material-ui/icons/DeleteOutline";
+import PlayCircleFilledIcon from "@material-ui/icons/PlayCircleFilled";
+import GetAppIcon from "@material-ui/icons/GetApp";
+import GetAppOutlinedIcon from "@material-ui/icons/GetAppOutlined";
+
+import { connect } from "react-redux";
+
+import ExperimentDetails from "./ExperimentPages/ExperimentDetails";
+import ErrorPage from "./ErrorPage";
+
+import {
+  storeAllPetsExperiment,
+  storeExperimentDetail,
+  storePetsConfig,
+  storeEquipmentData,
+  storePetsExperiment,
+  storeStatus,
+  storeMonsterGroup,
+  storeMonsterData,
+  reset
+} from "../../redux/actions/shjh";
+
+import { withRouter } from "react-router-dom";
+import { withStyles } from "@material-ui/core/styles";
+import { DialogActions } from "../../utils/Variables";
+
+import AddIcon from "@material-ui/icons/AddCircle";
+import ClearIcon from "@material-ui/icons/Clear";
+import LaunchIcon from "@material-ui/icons/Launch";
+import InfoIcon from "@material-ui/icons/Info";
+
+
+
+const styles = theme => ({
+  content: {
+    flexGrow: 1,
+    padding: theme.spacing.unit * 3,
+    height: "100vh",
+    overflow: "auto"
+  },
+  primary: {
+    color: `${theme.palette.primary.dark} !important`,
+    cursor: "pointer !important"
+  },
+  inLineLink: {
+    color: theme.palette.text.disabled,
+    cursor: "not-allowed",
+    fontWeight: 700,
+    textDecoration: "underline"
+  },
+  pageHeader: {
+    alignItems: "flex-end",
+    display: "flex",
+    marginBottom: theme.spacing.unit * 2,
+    // marginTop: theme.spacing.unit * 2,
+    width: 900
+  },
+  pageHeaderText: {
+    color: theme.palette.secondary.main,
+    fontSize: theme.typography.fontSize * 2,
+    fontWeight: 700
+  },
+  pageHeaderToolbox: {
+    marginLeft: theme.spacing.unit * 2,
+    marginRight: theme.spacing.unit
+  },
+  progressDescription: {
+    alignItems: "center",
+    color: "#777",
+    display: "flex",
+    flexDirection: "column",
+    fontSize: theme.typography.fontSize,
+    fontWeight: 500,
+    justifyContent: "center",
+    marginTop: "40vh"
+  },
+  root: {
+    overflowX: "auto"
+  },
+  spacer: theme.mixins.toolbar,
+
+  dialogTitle: {
+    fontWeight: 700,
+    fontFamily: "monospace",
+    fontSize: "20px",
+    color: "#364ef6"
+  },
+  infoIcon: {
+    paddingTop: "10px"
+  },
+  button: {
+    margin: theme.spacing.unit,
+    width: "10px",
+    height: "25px",
+    fontSize: "10px"
+  },
+  tableHead : {
+    fontSize : theme.typography.fontSize * 1.1,
+  }
+});
+
+
+//The pagination navigation
+
+
+class ShjhLandingPage extends Component {
+  state = {
+    experimentID: 0,
+    openRemoveDialog: false,
+    page: 0,
+    rowsPerPage: 25,
+    openDetail: false,
+    isExperimentDetailLoaded: false
+  };
+
+  componentDidMount = () => {
+    const { dispatch } = this.props;
+    dispatch(reset());
+    this.loadAllData();
+    ls.remove("id"); // to remove id from Local Storage
+    ls.remove("name"); // to remove name from Local Storage
+  };
+
+  loadAllData = async () => {
+    await this.loadPetsData();
+    await this.loadExperimentData();
+    this.checkExperimentsStatus();
+  };
+
+  checkExperimentsStatus = () => {
+    const { data } = this.props;
+    if (data.all_pets_experiment.length > 0) {
+      let allFinished = this.checkAllFinished();
+
+      if (!allFinished) {
+        this.intervalId = setInterval(() => {
+          this.loadExperimentData();
+          let finished = this.checkAllFinished();
+          if (finished) {
+            clearInterval(this.intervalId);
+          }
+        }, 3000);
+      }
+    }
+  };
+
+  //Check via Progress
+  checkAllFinished = () => {
+    const { data } = this.props;
+    let allFinished = data.all_pets_experiment
+      .map(e => e.progress)
+      .every(f => f === 1);
+    return allFinished;
+  };
+
+  //DATA LOADING
+  loadExperimentData = async () => {
+    const { dispatch } = this.props;
+    try {
+      let response = await axios.get("/shjh/experiment/");
+      console.log("All experiments", response);
+      dispatch(storeAllPetsExperiment(response.data));
+    } catch (err) {
+      console.log("Experiment fail to load", err);
+    }
+  };
+
+  loadPetsData = async () => {
+    const { data, dispatch } = this.props;
+    try {
+      let response = await axios.get("/shjh/config/pet");
+      console.log("Data loaded", response);
+      dispatch(storePetsConfig(response.data));
+    } catch (err) {
+      console.log("error", err);
+    }
+  };
+
+  goToUploadPage = () => {
+    const { history } = this.props;
+    history.push("/shjh/upload");
+  };
+
+  goToCreateExperimentPage = async () => {
+    const { dispatch, history } = this.props;
+    history.push("/shjh/experiment");
+  };
+
+  experimentDetails = async id => {
+    const { data, dispatch } = this.props;
+    try {
+      let response = await axios.get(`/shjh/generation_rule/${id}`);
+      console.log("Experiment details", response.data);
+      dispatch(storeExperimentDetail(response.data));
+    } catch (err) {
+      console.log("Experiment detail error", err);
+    }
+    this.setState({
+      openDialog: true,
+      isExperimentDetailLoaded: true
+    });
+  };
+
+  handleCloseExperimentDetails = () => {
+    this.setState({
+      openDialog: false
+    });
+  };
+
+  handleOpenRemoveDialog = id => {
+    this.setState({
+      experimentID: id,
+      openRemoveDialog: true
+    });
+  };
+
+  handleCloseRemoveDialog = () => {
+    this.setState({
+      openRemoveDialog: false
+    });
+  };
+
+  handleResults = id => {
+    const { history, dispatch, data } = this.props;
+    axios.get(`/shjh/experiment/${id}`).then(async res => {
+      console.log("res", res);
+      await dispatch(storePetsExperiment(res.data)); // will store the results for finished experiment.
+      //There will be an id, where the id will be used to load the results on results page.
+
+      ls.set("id", res.data.id); // to store the id in the Local Storage
+      ls.set("name", res.data.name); // to store the exp name in Local Storage
+      history.push("/shjh/results");
+    });
+  };
+
+  handleRemove = async () => {
+    const { dispatch, data } = this.props;
+    const { experimentID } = this.state;
+    try {
+      let response = await axios.delete(`/shjh/experiment/${experimentID}`);
+      console.log("Experiment deleted", response);
+      await dispatch(storeAllPetsExperiment(response.data));
+      this.handleCloseRemoveDialog();
+    } catch (err) {
+      console.log("Experiment cannot be deleted", err);
+    }
+  };
+
+  handleChangePage = (event, page) => {
+    this.setState({ page });
+  };
+
+  handleChangeRowsPerPage = event => {
+    this.setState({ page: 0, rowsPerPage: Number(event.target.value) });
+  };
+
+  //May need a Start Experiment Button in the future in the landing page (pending)
+  startExperiment = id => {
+    const { dispatch, data } = this.props;
+    try {
+      axios({
+        method: "post",
+        url: `/shjh/experiment/${id}/start`,
+        data: {},
+        timeout: 5000
+      });
+      console.log("Continue Experiment");
+    } catch (err) {
+      console.log("Unable to continue Experiment", err);
+    }
+  };
+
+  continueExperiment = id => {
+    const { dispatch, data } = this.props;
+    try {
+      axios({
+        method: "post",
+        url: `/shjh/experiment/${id}/start`,
+        data: {}
+      });
+      console.log("Continue Experiment");
+    } catch (err) {
+      console.log("Unable to continue Experiment", err);
+    }
+  };
+
+  //To download Pets data
+  handleDownloadPets = id => {
+    axios({
+      method: "GET",
+      url: `/shjh/experiment/download/${id}`,
+      responseType: "blob"
+    })
+      .then(res => {
+        console.log("Download pets response", res);
+        FileDownload(res.data, `experiment${id}pets.xls`);
+      })
+      .catch(err => {
+        console.log("Download Pets Error", err);
+      });
+  };
+
+  componentWillUnmount() {
+    clearInterval(this.intervalId);
+  }
+
+  render() {
+    const {
+      page,
+      rowsPerPage,
+      openDialog,
+      isExperimentDetailLoaded,
+      openRemoveDialog
+    } = this.state;
+
+    const { classes, data } = this.props;
+
+    return (
+      <main className={classes.content}>
+        {data.all_pets_experiment ? (
+          <React.Fragment>
+            <FadeIn transitionDuration={600}>
+              <div className={classes.spacer} />
+              <Grid container spacing={8}>
+                <Grid item xs={false} lg={1} />
+                <Grid
+                  className={classes.gridItem}
+                  item
+                  xs={12}
+                  sm={12}
+                  md={12}
+                  lg={9}
+                  xl={9}
+                >
+                  <div className={classes.pageHeader}>
+                    <Typography
+                      className={classes.pageHeaderText}
+                      variant="h4"
+                      gutterBottom
+                      component="h2"
+                    >
+                      Experiments ({data.all_pets_experiment.length})
+                    </Typography>
+
+                    <div className={classes.pageHeaderToolbox}>
+                      <Tooltip title="Add Experiment">
+                        <IconButton
+                          color="primary"
+                          aria-label="Add"
+                          className={classes.pageHeaderButton}
+                          onClick={this.goToCreateExperimentPage}
+                        >
+                          <AddIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </div>
+                  </div>
+
+                  <div className={classes.tableContainer}>
+                    <Paper className={classes.root}>
+                      <Table className={classes.table}>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell align="left" className={classes.tableHead}>Experiment Name</TableCell>
+                            <TableCell align="left" className={classes.tableHead}>Date Created</TableCell>
+                            <TableCell align="left" className={classes.tableHead}>Details</TableCell>
+                            <TableCell align="left" className={classes.tableHead}>Progress</TableCell>
+                            <TableCell align="right" className={classes.tableHead} style={{paddingRight:'55px'}}>Options</TableCell>
+                            {/* <TableCell align="right"></TableCell> */}
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {data.all_pets_experiment.length === 0 ? (
+                            <TableRow>
+                              <TableCell align="center" colSpan={5}>
+                                No experiments found.
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            data.all_pets_experiment
+                              .slice(
+                                page * rowsPerPage,
+                                page * rowsPerPage + rowsPerPage
+                              )
+                              .map((exp, index) => (
+                                <TableRow key={index}>
+                                  {/* Link to Results Page */}
+                                  <TableCell
+                                    align="left"
+                                    component="th"
+                                    scope="row"
+                                  >
+                                    {exp.progress === 1 ? (
+                                      <span
+                                        className={`${classes.inLineLink} ${classes.primary}`}
+                                        onClick={this.handleResults.bind(
+                                          this,
+                                          exp.id
+                                        )}
+                                      >
+                                        {exp.name}
+                                      </span>
+                                    ) : (
+                                      <span className={classes.inLineLink}>
+                                        {exp.name}
+                                      </span>
+                                    )}
+                                  </TableCell>
+
+                                  {/* Date */}
+                                  <TableCell align="left">
+                                    {exp.created_at}
+                                  </TableCell>
+
+                                  {/* Experiment Details */}
+                                  <TableCell align="left">
+                                    <Tooltip
+                                      title="More Detail"
+                                      placement="right"
+                                    >
+                                      <IconButton
+                                        onClick={this.experimentDetails.bind(
+                                          this,
+                                          exp.id
+                                        )}
+                                      >
+                                        <InfoIcon />
+                                      </IconButton>
+                                    </Tooltip>
+                                  </TableCell>
+
+                                  {/* Progress Bar */}
+                                  <TableCell align="right">
+                                    {`${(exp.progress * 100).toFixed(2)}%`}
+                                    <LinearProgress
+                                      variant="determinate"
+                                      value={exp.progress * 100}
+                                    />
+                                  </TableCell>
+
+                                  {/* Continue and Delete button  */}
+                                  <TableCell align="right">
+                                    {/* {
+                                      <Tooltip
+                                        title="Continue"
+                                        placement="left"
+                                      >
+                                        <IconButton
+                                          disabled={
+                                            exp.progress === 1 ? false : true
+                                          }
+                                        >
+                                          <PlayCircleFilledIcon />
+                                        </IconButton>
+                                      </Tooltip>
+                                    } */}
+                                    
+                                    {/* Download Button  */}
+                                    {
+                                      <Tooltip
+                                        title="Download Pets"
+                                        placement="left"
+                                      >
+                                        <IconButton
+                                          disabled={
+                                            exp.progress === 1 ? false : true
+                                          }
+                                          onClick={this.handleDownloadPets.bind(
+                                            this,
+                                            exp.id
+                                          )}
+                                        >
+                                          <GetAppOutlinedIcon />
+                                        </IconButton>
+                                      </Tooltip>
+                                    }
+
+                                    {exp.progress === 1 ? (
+                                      <Tooltip title="Delete" placement="right">
+                                        <IconButton
+                                          onClick={this.handleOpenRemoveDialog.bind(
+                                            this,
+                                            exp.id
+                                          )}
+                                        >
+                                          <DeleteOutlineIcon />
+                                        </IconButton>
+                                      </Tooltip>
+                                    ) : (
+                                      <IconButton>
+                                        <DeleteOutlineIcon />
+                                      </IconButton>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                          )}
+                        </TableBody>
+                        <TableFooter>
+                          <TableRow>
+                            <TablePagination
+                              rowsPerPageOptions={[5, 10, 15, 25]}
+                              colSpan={5}
+                              count={5}
+                              rowsPerPage={rowsPerPage}
+                              page={page}
+                              SelectProps={{
+                                native: true
+                              }}
+                              onChangePage={this.handleChangePage}
+                              onChangeRowsPerPage={this.handleChangeRowsPerPage}
+                              ActionsComponent={TablePaginationActions}
+                            />
+                          </TableRow>
+                        </TableFooter>
+                      </Table>
+                    </Paper>
+                  </div>
+                </Grid>
+              </Grid>
+
+              {/* EXPERIMENT DETAIL DIALOG */}
+              <Dialog fullWidth={true} open={openDialog} maxWidth="sm">
+                <DialogTitle
+                  disableTypography
+                  variant="h1"
+                  className={classes.dialogTitle}
+                >
+                  EXPERIMENT DETAIL
+                  <InfoIcon style={{ paddingTop: "10px" }} />
+                </DialogTitle>
+                <DialogContent>
+                  {isExperimentDetailLoaded && <ExperimentDetails />}
+                </DialogContent>
+                <DialogActions>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={this.handleCloseExperimentDetails}
+                  >
+                    Close
+                  </Button>
+                </DialogActions>
+              </Dialog>
+
+              {/* DELETE EXPERIMENT DIALOG*/}
+              <Dialog
+                fullWidth={true}
+                open={openRemoveDialog}
+                onClose={this.handleCloseRemoveDialog}
+                aria-labelledby="alert-dialog-title"
+                aria-describedby="alert-dialog-description"
+              >
+                <DialogTitle id="alert-dialog-title">
+                  {"Are you sure you want to delete ?"}
+                </DialogTitle>
+                <DialogContent>
+                  <DialogContentText id="alert-dialog-description">
+                    Data will be deleted permanently.
+                  </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                  <Button
+                    onClick={this.handleCloseRemoveDialog}
+                    color="primary"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    autoFocus
+                    color="primary"
+                    onClick={this.handleRemove}
+                    variant="contained"
+                  >
+                    Delete
+                  </Button>
+                </DialogActions>
+              </Dialog>
+            </FadeIn>
+          </React.Fragment>
+        ) : (
+          <div className={classes.progressDescription}>
+            {/* <CircularProgress className={classes.progress} /> */}
+            <ErrorPage />
+          </div>
+        )}
+      </main>
+    );
+  }
+}
+
+ShjhLandingPage.propTypes = {
+  classes: PropTypes.object.isRequired
+};
+
+const mapStateToProps = state => {
+  return {
+    data: state.shjh
+  };
+};
+
+export default connect(mapStateToProps)(
+  withStyles(styles)(withRouter(ShjhLandingPage))
+);
